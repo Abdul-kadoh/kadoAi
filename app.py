@@ -1,17 +1,14 @@
 import streamlit as st
 import google.generativeai as genai
+import google.api_core.exceptions as google_exceptions
 import os
 
 # ----------------------
 # Setup Gemini API
 # ----------------------
-# It is best practice to store API keys in environment variables for security.
-# Replace this line with your actual API key for local testing,
-# or set it as an an environment variable in your deployment environment.
 API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
-    # Fallback for local testing if not set in env variables
-    API_KEY = "AIzaSyCb9UhHRcbIMKPuNWSH-nt34dF0upxeCOY"
+    API_KEY = "AIzaSyC04X6NytrmscDS2aCny12GzcAofrPcb5o"  # ⚠️ Replace with your own for production
 
 genai.configure(api_key=API_KEY)
 
@@ -71,31 +68,40 @@ if "history" not in st.session_state:
 # ----------------------
 st.markdown("<h2 style='text-align:center;'>🤖 Chat with Kadoh AI</h2>", unsafe_allow_html=True)
 
-# Build the entire conversation HTML as a single string
 chat_html = ""
 for role, msg in st.session_state.history:
     if role == "user":
         chat_html += f"<div class='user-message'>{msg}</div>"
     else:
         chat_html += f"<div class='bot-message'>{msg}</div>"
-
-# Render the messages directly without a container
 st.markdown(chat_html, unsafe_allow_html=True)
 
 # ----------------------
-# Custom Input at Bottom
+# Chat Input
 # ----------------------
-# Use st.chat_input which provides a built-in text input with a send button
-# and handles the logic more cleanly.
 user_input = st.chat_input("Type your message...")
 
 if user_input:
     # Save user message
     st.session_state.history.append(("user", user_input))
 
-    # Get bot response
-    response = chat.send_message(user_input)
-    st.session_state.history.append(("bot", response.text))
-    
-    # Rerun the app to update the chat display with the new messages
+    try:
+        # Only keep last 10 messages to reduce token usage
+        trimmed_history = st.session_state.history[-10:]
+
+        # Send only the user input (not full history) to Gemini
+        response = chat.send_message(user_input)
+
+        st.session_state.history.append(("bot", response.text))
+
+    except google_exceptions.ResourceExhausted:
+        st.session_state.history.append(
+            ("bot", "⚠️ API quota exhausted. Please wait a while or upgrade your plan.")
+        )
+
+    except Exception as e:
+        st.session_state.history.append(
+            ("bot", f"⚠️ An unexpected error occurred: {str(e)}")
+        )
+
     st.rerun()
